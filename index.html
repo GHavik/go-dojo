@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>囲碁道場 · Go Puzzle Dojo</title>
+<style>
+  /* ─── API Key: paste yours below ─────────────────────────────────────── */
+  /* See the JS section at the bottom — look for: const API_KEY = "..."     */
+
+  :root {
+    --bg:        #0e0c08;
+    --bg2:       #1a160e;
+    --gold:      #c8923a;
+    --gold-dim:  #7a5420;
+    --gold-pale: rgba(200,146,58,0.14);
+    --stone-b:   #181818;
+    --stone-w:   #eae6d5;
+    --board:     #c49a52;
+    --text:      #ddd0b0;
+    --text-dim:  #7a6840;
+    --green:     #70c858;
+    --red:       #c86858;
+    --border:    rgba(200,146,58,0.16);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(ellipse 90% 50% at 50% 0%, #1e1608 0%, var(--bg) 65%);
+    color: var(--text);
+    font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 60px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: normal;
+    letter-spacing: 0.22em;
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(200,146,58,0.35);
+    margin-bottom: 3px;
+  }
+  .subtitle {
+    font-size: 0.62rem;
+    color: #3a2510;
+    letter-spacing: 0.3em;
+    margin-bottom: 20px;
+  }
+
+  /* Stats */
+  .stats {
+    display: flex;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .stat {
+    padding: 10px 18px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-val { font-size: 1.4rem; line-height: 1; }
+  .stat-lbl { font-size: 0.57rem; color: #3a2510; letter-spacing: 0.12em; margin-top: 3px; }
+  .dots { display: flex; gap: 5px; justify-content: center; margin-bottom: 4px; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(200,146,58,0.13);
+    border: 1px solid rgba(200,146,58,0.32);
+    transition: background 0.4s;
+  }
+  .dot.on { background: var(--gold); }
+
+  /* Rank-up banner */
+  .rankup-banner {
+    background: var(--gold-pale);
+    border: 1px solid rgba(200,146,58,0.45);
+    border-radius: 8px;
+    padding: 9px 24px;
+    margin-bottom: 14px;
+    color: var(--gold);
+    font-size: 0.88rem;
+    letter-spacing: 0.08em;
+    text-align: center;
+    animation: slideDown 0.5s ease;
+    display: none;
+  }
+  .rankup-banner.show { display: block; }
+
+  /* Card */
+  .card {
+    background: rgba(255,255,255,0.022);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .puzzle-meta { font-size: 0.63rem; color: var(--gold-dim); letter-spacing: 0.08em; margin-bottom: 4px; }
+  .puzzle-title { font-size: 1.05rem; color: var(--gold); font-weight: normal; margin-bottom: 4px; }
+  .puzzle-desc { font-size: 0.8rem; color: #8a7050; line-height: 1.5; margin-bottom: 14px; }
+
+  /* Board */
+  .board-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 36px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  canvas {
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  /* Messages */
+  .msg {
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 11px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.correct { background: rgba(70,170,70,0.08); border: 1px solid rgba(70,170,70,0.28); color: var(--green); }
+  .msg.wrong   { background: rgba(170,60,60,0.08);  border: 1px solid rgba(170,60,60,0.28);  color: var(--red); }
+  .msg.hint    { background: rgba(80,110,200,0.07); border: 1px solid rgba(80,110,200,0.22); color: #7888c0; }
+
+  /* Buttons */
+  .btns { display: flex; gap: 8px; }
+  button {
+    flex: 1;
+    padding: 9px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: opacity 0.2s;
+    background: transparent;
+  }
+  button:active { opacity: 0.7; }
+  #btn-hint   { border: 1px solid rgba(100,130,200,0.3); color: #7888b8; }
+  #btn-retry  { border: 1px solid rgba(190,100,80,0.35); color: #c07060; }
+  #btn-next   { border: 1px solid rgba(200,146,58,0.38); color: var(--gold); background: var(--gold-pale); flex: 2; }
+
+  /* Loading */
+  #loading {
+    text-align: center;
+    padding: 56px 0;
+    display: none;
+  }
+  #loading.show { display: block; }
+  .spinner {
+    width: 34px; height: 34px; margin: 0 auto 14px;
+    border: 2px solid rgba(200,146,58,0.18);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.85s linear infinite;
+  }
+  .loading-txt { color: #5a4020; font-size: 0.78rem; letter-spacing: 0.1em; }
+
+  /* API key warning */
+  #api-input:focus {
+    border-color: rgba(200,146,58,0.6);
+    box-shadow: 0 0 0 2px rgba(200,146,58,0.1);
+  }
+
+  /* Rank ladder */
+  .rank-section { margin-top: 22px; text-align: center; }
+  .rank-lbl { font-size: 0.6rem; color: #2a1808; letter-spacing: 0.15em; margin-bottom: 8px; }
+  .rank-ladder { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+  .rank-pip {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.64rem;
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #1a1008;
+    transition: all 0.4s;
+  }
+  .rank-pip.past { border-color: rgba(70,155,70,0.28); color: #68a858; background: rgba(70,155,70,0.09); }
+  .rank-pip.cur  { border-color: rgba(200,146,58,0.5); color: var(--gold); background: var(--gold-pale); }
+
+  .footer-note { margin-top: 14px; font-size: 0.59rem; color: #1a1008; letter-spacing: 0.08em; text-align: center; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes slideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+
+<h1>囲碁道場</h1>
+<div class="subtitle">GO PUZZLE DOJO · AI-GENERATED</div>
+
+<!-- API Key Setup Screen -->
+<div id="api-screen" style="display:none; width:100%; max-width:420px; margin-bottom:16px;">
+  <div style="
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 28px 24px;
+    text-align: center;
+  ">
+    <div style="font-size:1.6rem; margin-bottom:6px;">🔑</div>
+    <div style="font-size:1rem; color:var(--gold); margin-bottom:8px; font-weight:normal;">Enter your API Key</div>
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:20px; line-height:1.6;">
+      Get yours free at <a href="https://console.anthropic.com" target="_blank" style="color:var(--gold); text-decoration:none;">console.anthropic.com</a><br>
+      It's stored only on your device.
+    </div>
+    <input id="api-input" type="password"
+      placeholder="sk-ant-..."
+      style="
+        width: 100%;
+        padding: 10px 14px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(200,146,58,0.3);
+        border-radius: 7px;
+        color: var(--text);
+        font-size: 0.85rem;
+        font-family: monospace;
+        outline: none;
+        margin-bottom: 10px;
+      "
+    />
+    <div id="api-error" style="font-size:0.72rem; color:var(--red); margin-bottom:10px; display:none;"></div>
+    <button id="btn-save-key" style="
+      width: 100%;
+      padding: 10px;
+      background: var(--gold-pale);
+      border: 1px solid rgba(200,146,58,0.4);
+      border-radius: 7px;
+      color: var(--gold);
+      font-size: 0.82rem;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.07em;
+    ">Start Practicing →</button>
+  </div>
+</div>
+
+<!-- Small key indicator when playing -->
+<div id="api-badge" style="display:none; margin-bottom:12px; text-align:right; width:100%; max-width:420px;">
+  <span style="font-size:0.6rem; color:#3a2510; cursor:pointer;" id="change-key-btn">🔑 change key</span>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-val" id="s-rank" style="color:#c8923a">30k</div>
+    <div class="stat-lbl">RANK</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val" id="s-streak" style="color:#7ec86a">0</div>
+    <div class="stat-lbl">STREAK</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val" id="s-solved" style="color:#a06cc8">0</div>
+    <div class="stat-lbl">SOLVED</div>
+  </div>
+  <div class="stat" style="border-right:none">
+    <div class="dots">
+      <div class="dot" id="d0"></div>
+      <div class="dot" id="d1"></div>
+      <div class="dot" id="d2"></div>
+    </div>
+    <div class="stat-lbl">RANK UP</div>
+  </div>
+</div>
+
+<div class="rankup-banner" id="rankup-banner"></div>
+
+<div class="card">
+  <div id="loading" class="show">
+    <div class="spinner"></div>
+    <div class="loading-txt">Generating your puzzle…</div>
+  </div>
+
+  <div id="puzzle-ui" style="display:none">
+    <div class="puzzle-meta" id="puzzle-meta"></div>
+    <div class="puzzle-title" id="puzzle-title"></div>
+    <div class="puzzle-desc" id="puzzle-desc"></div>
+
+    <div class="board-wrap">
+      <canvas id="board"></canvas>
+    </div>
+
+    <div class="msg hint" id="msg-hint"></div>
+    <div class="msg" id="msg-result"></div>
+
+    <div class="btns">
+      <button id="btn-hint">Hint</button>
+      <button id="btn-retry">Try Again</button>
+      <button id="btn-next">Next Puzzle →</button>
+    </div>
+  </div>
+</div>
+
+<div class="rank-section">
+  <div class="rank-lbl">RANK LADDER</div>
+  <div class="rank-ladder" id="rank-ladder"></div>
+</div>
+<div class="footer-note">3 correct in a row → rank up · Hints reset your streak</div>
+<div id="reliability-warning" style="
+  display: none;
+  margin-top: 12px;
+  max-width: 420px;
+  width: 100%;
+  background: rgba(180,130,50,0.08);
+  border: 1px solid rgba(180,130,50,0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  color: #a07840;
+  line-height: 1.6;
+  text-align: center;
+">
+  ⚠️ At this level AI-generated puzzles may become less reliable. For serious training consider
+  <a href="https://tsumego-hero.com" target="_blank" style="color:#c8923a;">Tsumego Hero</a> or
+  <a href="https://goproblems.com" target="_blank" style="color:#c8923a;">GoProblems.com</a>.
+</div>
+
+<script>
+// API key is entered in the app UI and stored in localStorage
+let API_KEY = localStorage.getItem("go_dojo_api_key") || "";
+
+const RANKS = ["30k","25k","20k","15k","10k","7k","5k","3k","1k","1d","2d","3d"];
+const THEMES = [
+  "capturing a stone in atari","a ladder (shicho)","a net (geta)","a snapback tesuji",
+  "a double atari fork","connecting to save a group","making two eyes to live",
+  "a ko fight","cutting to isolate stones","a throw-in tesuji",
+  "an endgame sente move","a squeeze tesuji",
+];
+
+const SEED_PUZZLES = [
+  { rank:"30k", title:"Capture the Stone", boardSize:9,
+    description:"The black stone has only one liberty. Fill it to capture!",
+    hint:"Play at the only empty intersection next to the black stone.",
+    stones:[{x:4,y:4,color:"black"},{x:4,y:3,color:"white"},{x:3,y:4,color:"white"},{x:5,y:4,color:"white"}],
+    turn:"white", correct:[{x:4,y:5}],
+    explanation:"E6 fills black's last liberty — the stone is captured!" },
+  { rank:"30k", title:"Escape Atari", boardSize:9,
+    description:"Your white stone is in atari! Run to safety.",
+    hint:"Move to the only liberty your stone has left.",
+    stones:[{x:3,y:3,color:"white"},{x:3,y:2,color:"black"},{x:2,y:3,color:"black"},{x:4,y:3,color:"black"}],
+    turn:"white", correct:[{x:3,y:4}],
+    explanation:"D5 gives your stone a second liberty, escaping atari." },
+  { rank:"25k", title:"Double Atari", boardSize:9,
+    description:"Find the move that threatens two black stones at once!",
+    hint:"A single stone can threaten two separate groups simultaneously.",
+    stones:[{x:3,y:3,color:"black"},{x:5,y:5,color:"black"},{x:4,y:3,color:"white"},{x:3,y:4,color:"white"}],
+    turn:"white", correct:[{x:4,y:5},{x:5,y:4}],
+    explanation:"This fork attacks both black groups — they can't both be saved." },
+  { rank:"20k", title:"Start a Ladder", boardSize:9,
+    description:"Begin a ladder to chase this black stone into the wall.",
+    hint:"Put the stone in atari toward the corner.",
+    stones:[{x:4,y:4,color:"black"},{x:4,y:3,color:"white"},{x:3,y:4,color:"white"}],
+    turn:"white", correct:[{x:5,y:4}],
+    explanation:"F5 starts a ladder — black runs toward the edge and is caught." },
+];
+
+// ── State ────────────────────────────────────────────────────────────────
+let state = {
+  rankIdx: 0,
+  streak: 0,
+  solved: 0,
+  phase: "loading",  // loading | playing | correct | wrong
+  puzzle: null,
+  showHint: false,
+  lastMove: null,
+  usedIds: [],
+  seedIdx: 0,
+};
+
+function rank() { return RANKS[state.rankIdx]; }
+function nextRankName() { return RANKS[Math.min(state.rankIdx + 1, RANKS.length - 1)]; }
+
+// ── Canvas board ─────────────────────────────────────────────────────────
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+const BS = 9;
+const maxBoard = Math.min(360, window.innerWidth - 72);
+const CELL = Math.floor((maxBoard - 44) / (BS - 1));
+const PAD = Math.floor(CELL * 0.55);
+const BPX = (BS - 1) * CELL + PAD * 2;
+canvas.width = BPX; canvas.height = BPX;
+canvas.style.width = BPX + "px"; canvas.style.height = BPX + "px";
+
+function px(c) { return PAD + c * CELL; }
+
+function drawBoard() {
+  const p = state.puzzle;
+  if (!p) return;
+
+  // Board fill
+  ctx.fillStyle = "#c49a52";
+  roundRect(ctx, 0, 0, BPX, BPX, 6);
+  ctx.fill();
+
+  // Wood grain
+  ctx.strokeStyle = "rgba(154,112,48,0.18)"; ctx.lineWidth = 0.6;
+  for (let i = 0; i < 8; i++) {
+    ctx.beginPath();
+    ctx.moveTo(PAD + i * (BPX - PAD*2)/7, PAD);
+    ctx.lineTo(PAD + i * (BPX - PAD*2)/7 + 14, BPX - PAD);
+    ctx.stroke();
+  }
+
+  // Grid
+  ctx.strokeStyle = "#4a2e0a"; ctx.lineWidth = 0.9;
+  for (let i = 0; i < BS; i++) {
+    ctx.beginPath(); ctx.moveTo(px(i), px(0)); ctx.lineTo(px(i), px(BS-1)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px(0), px(i)); ctx.lineTo(px(BS-1), px(i)); ctx.stroke();
+  }
+
+  // Star points
+  const stars = [[2,2],[6,2],[2,6],[6,6],[4,4]];
+  ctx.fillStyle = "#4a2e0a";
+  for (const [sx,sy] of stars) { ctx.beginPath(); ctx.arc(px(sx), px(sy), 3.2, 0, Math.PI*2); ctx.fill(); }
+
+  // Hint glow
+  if (state.showHint && state.phase === "playing") {
+    for (const c of p.correct) {
+      ctx.beginPath(); ctx.arc(px(c.x), px(c.y), CELL * 0.32, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(80,200,80,0.28)"; ctx.fill();
+      ctx.strokeStyle = "rgba(60,180,60,0.65)"; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  }
+
+  // Stones
+  const r = CELL * 0.38;
+  for (const s of p.stones) {
+    const cx = px(s.x), cy = px(s.y);
+    if (s.color === "black") {
+      const g = ctx.createRadialGradient(cx - r*.22, cy - r*.25, r*.05, cx, cy, r);
+      g.addColorStop(0, "#383838"); g.addColorStop(1, "#0e0e0e");
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - r*.25, cy - r*.28, r*.28, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.11)"; ctx.fill();
+    } else {
+      const g = ctx.createRadialGradient(cx - r*.2, cy - r*.22, r*.05, cx, cy, r);
+      g.addColorStop(0, "#f5f1e4"); g.addColorStop(1, "#d8d4c2");
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = "#aaa"; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx - r*.2, cy - r*.22, r*.27, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.fill();
+    }
+  }
+
+  // Last move marker
+  if (state.lastMove) {
+    const lm = state.lastMove;
+    ctx.beginPath(); ctx.arc(px(lm.x), px(lm.y), CELL * 0.13, 0, Math.PI*2);
+    ctx.fillStyle = lm.color === "black" ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.4)";
+    ctx.fill();
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// ── Canvas click / touch ─────────────────────────────────────────────────
+function canvasCoord(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = BPX / rect.width, scaleY = BPX / rect.height;
+  let cx, cy;
+  if (e.changedTouches && e.changedTouches.length > 0) {
+    cx = (e.changedTouches[0].clientX - rect.left) * scaleX;
+    cy = (e.changedTouches[0].clientY - rect.top) * scaleY;
+  } else if (e.touches && e.touches.length > 0) {
+    cx = (e.touches[0].clientX - rect.left) * scaleX;
+    cy = (e.touches[0].clientY - rect.top) * scaleY;
+  } else {
+    cx = (e.clientX - rect.left) * scaleX;
+    cy = (e.clientY - rect.top) * scaleY;
+  }
+  const x = Math.round((cx - PAD) / CELL);
+  const y = Math.round((cy - PAD) / CELL);
+  return { x, y };
+}
+
+canvas.addEventListener("click", e => {
+  if (state.phase !== "playing") return;
+  const { x, y } = canvasCoord(e);
+  if (x < 0 || x >= BS || y < 0 || y >= BS) return;
+  const p = state.puzzle;
+  const occupied = p.stones.some(s => s.x === x && s.y === y);
+  if (occupied) return;
+  handleMove(x, y);
+});
+canvas.addEventListener("touchend", e => {
+  e.preventDefault();
+  if (state.phase !== "playing") return;
+  const { x, y } = canvasCoord(e);
+  if (x < 0 || x >= BS || y < 0 || y >= BS) return;
+  const p = state.puzzle;
+  if (p.stones.some(s => s.x === x && s.y === y)) return;
+  handleMove(x, y);
+}, { passive: false });
+
+function handleMove(x, y) {
+  const p = state.puzzle;
+  const correct = p.correct.some(c => c.x === x && c.y === y);
+  state.lastMove = { x, y, color: p.turn };
+  p.stones.push({ x, y, color: p.turn });
+
+  if (correct) {
+    state.streak++;
+    state.solved++;
+    state.phase = "correct";
+    showMsg("correct", "✓ " + p.explanation);
+    if (state.streak % 3 === 0) {
+      const nr = nextRankName();
+      if (nr !== rank()) {
+        state.rankIdx++;
+        showRankUp(nr);
+      }
+    }
+  } else {
+    state.streak = 0;
+    state.phase = "wrong";
+    showMsg("wrong", "✗ Wrong move — try again!");
+  }
+  updateUI();
+  drawBoard();
+}
+
+// ── Liberty counter (to validate atari/capture puzzles) ──────────────────
+function getLiberties(stones, sx, sy) {
+  const color = stones.find(s => s.x === sx && s.y === sy)?.color;
+  if (!color) return null;
+  const stoneMap = {};
+  for (const s of stones) stoneMap[`${s.x},${s.y}`] = s.color;
+  // Flood-fill to find the group
+  const visited = new Set();
+  const queue = [`${sx},${sy}`];
+  const liberties = new Set();
+  while (queue.length) {
+    const key = queue.pop();
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const [x, y] = key.split(",").map(Number);
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nx = x+dx, ny = y+dy;
+      if (nx < 0 || nx > 8 || ny < 0 || ny > 8) continue;
+      const nk = `${nx},${ny}`;
+      if (!stoneMap[nk]) liberties.add(nk);
+      else if (stoneMap[nk] === color && !visited.has(nk)) queue.push(nk);
+    }
+  }
+  return liberties.size;
+}
+
+// ── API puzzle generation ────────────────────────────────────────────────
+async function generatePuzzle(targetRank) {
+  if (!API_KEY) throw new Error("no-key");
+  const rankIdx = RANKS.indexOf(targetRank);
+  const complexity = rankIdx <= 1
+    ? "VERY simple: only 3–5 stones. One obvious winning move."
+    : rankIdx <= 4 ? "Moderate: 5–9 stones. A clear tactic."
+    : "Complex: 8–15 stones. A nuanced tesuji or life-and-death.";
+
+  // Pick a theme appropriate to rank
+  const beginnerThemes = ["capturing a stone (fill its last liberty)","escaping atari","a simple double atari fork"];
+  const advancedThemes = ["a ladder (shicho)","a net (geta)","a snapback tesuji","a ko fight","making two eyes to live","a throw-in tesuji","an endgame sente move"];
+  const themes = rankIdx <= 2 ? beginnerThemes : [...beginnerThemes, ...advancedThemes];
+  const theme = themes[Math.floor(Math.random() * themes.length)];
+
+  const prompt = `You are a Go (baduk) puzzle designer. Create a TACTICALLY VALID puzzle as JSON.
+
+Rank: ${targetRank}
+Theme: ${theme}
+Complexity: ${complexity}
+Board: 9x9, x and y each 0–8 (0,0=top-left, x goes right, y goes down)
+
+CRITICAL — you must mentally verify your puzzle before outputting it:
+- If the theme is "capturing a stone", the target stone must have EXACTLY 1 liberty (be in atari already), and the correct move fills that last liberty.
+- If the theme is "escaping atari", the active player's stone must have EXACTLY 1 liberty, and the correct move adds a liberty or connects to a safe group.
+- If the theme is "double atari", the correct move must put TWO separate enemy groups each in atari (1 liberty) simultaneously.
+- All adjacencies are orthogonal only (up/down/left/right). Diagonal does not count.
+- Count liberties carefully: a liberty is an empty intersection directly adjacent to the stone or its connected group.
+- The description and explanation must accurately describe what is actually happening on the board.
+
+Return ONLY raw JSON, no markdown, no explanation:
+{"title":"...","description":"...","hint":"...","boardSize":9,"stones":[{"x":3,"y":3,"color":"black"},{"x":4,"y":3,"color":"white"}],"turn":"white","correct":[{"x":3,"y":4}],"explanation":"..."}
+
+Rules:
+- "turn" is "black" or "white"
+- "correct" has 1–3 valid moves (equivalent alternatives only)
+- All x,y are integers 0–8, no duplicates, correct moves not occupied by existing stones
+- Double-check: does the correct move actually achieve the stated goal?`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = await res.json();
+  const text = data.content.map(b => b.text || "").join("").trim();
+  const clean = text.replace(/```json|```/g, "").trim();
+  const puzzle = JSON.parse(clean);
+  if (!Array.isArray(puzzle.stones) || !Array.isArray(puzzle.correct) || !puzzle.turn)
+    throw new Error("bad shape");
+  const occ = new Set(puzzle.stones.map(s => `${s.x},${s.y}`));
+  puzzle.correct = puzzle.correct.filter(c =>
+    Number.isInteger(c.x) && Number.isInteger(c.y) &&
+    c.x >= 0 && c.x <= 8 && c.y >= 0 && c.y <= 8 && !occ.has(`${c.x},${c.y}`)
+  );
+  if (puzzle.correct.length === 0) throw new Error("no valid moves");
+  puzzle.rank = targetRank;
+  return puzzle;
+}
+
+async function loadPuzzle() {
+  state.phase = "loading";
+  state.showHint = false;
+  state.lastMove = null;
+  state.originalStones = null;
+  updateUI();
+
+  try {
+    let p;
+    try {
+      p = await generatePuzzle(rank());
+    } catch(e1) {
+      console.warn("First attempt failed, retrying:", e1.message);
+      p = await generatePuzzle(rank()); // one retry
+    }
+    state.puzzle = p;
+    state.originalStones = [...p.stones];
+    state.phase = "playing";
+  } catch (e) {
+    console.warn("AI failed:", e.message);
+    const s = SEED_PUZZLES[state.seedIdx % SEED_PUZZLES.length];
+    state.seedIdx++;
+    state.puzzle = { ...s, rank: rank() };
+    state.originalStones = [...state.puzzle.stones];
+    state.phase = "playing";
+  }
+  updateUI();
+  drawBoard();
+}
+
+// ── UI helpers ───────────────────────────────────────────────────────────
+function showMsg(type, text) {
+  const el = document.getElementById("msg-result");
+  el.className = `msg ${type} show`;
+  el.textContent = text;
+}
+function hideMsg() {
+  document.getElementById("msg-result").className = "msg";
+  document.getElementById("msg-hint").className = "msg hint";
+}
+
+function showRankUp(nr) {
+  const el = document.getElementById("rankup-banner");
+  el.textContent = `✦ Rank up! Welcome to ${nr} ✦`;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 3500);
+}
+
+function updateUI() {
+  const p = state.puzzle;
+  const loading = state.phase === "loading";
+
+  document.getElementById("loading").className = loading ? "show" : "";
+  document.getElementById("puzzle-ui").style.display = loading ? "none" : "block";
+
+  if (!loading && p) {
+    document.getElementById("puzzle-meta").textContent =
+      `${p.rank} · ${p.turn === "black" ? "● Black" : "○ White"} to play`;
+    document.getElementById("puzzle-title").textContent = p.title;
+    document.getElementById("puzzle-desc").textContent = p.description;
+  }
+
+  // Stats
+  document.getElementById("s-rank").textContent = rank();
+  document.getElementById("s-streak").textContent = state.streak;
+  document.getElementById("s-solved").textContent = state.solved;
+
+  // Dots
+  const d = state.streak % 3;
+  [0,1,2].forEach(i => {
+    document.getElementById(`d${i}`).className = "dot" + (i < d ? " on" : "");
+  });
+
+  // Buttons
+  const playing = state.phase === "playing";
+  const done = state.phase === "correct" || state.phase === "wrong";
+  document.getElementById("btn-hint").style.display = playing ? "block" : "none";
+  document.getElementById("btn-retry").style.display = state.phase === "wrong" ? "block" : "none";
+  document.getElementById("btn-next").style.display = done ? "block" : "none";
+
+  if (!done) hideMsg();
+
+  // Rank ladder
+  const ladder = document.getElementById("rank-ladder");
+  ladder.innerHTML = RANKS.map((r, i) => {
+    const cls = i === state.rankIdx ? "rank-pip cur" : i < state.rankIdx ? "rank-pip past" : "rank-pip";
+    return `<div class="${cls}">${r}</div>`;
+  }).join("");
+
+  // Reliability warning at 7k+
+  const warningEl = document.getElementById("reliability-warning");
+  if (warningEl) warningEl.style.display = state.rankIdx >= 5 ? "block" : "none";
+
+}
+
+// ── Button wiring ────────────────────────────────────────────────────────
+document.getElementById("btn-hint").addEventListener("click", () => {
+  state.showHint = true;
+  state.streak = 0;
+  updateUI();
+  const el = document.getElementById("msg-hint");
+  el.className = "msg hint show";
+  el.textContent = "💡 " + state.puzzle.hint;
+  drawBoard();
+});
+
+document.getElementById("btn-retry").addEventListener("click", () => {
+  state.phase = "playing";
+  state.lastMove = null;
+  state.showHint = false;
+  // Restore board to original state (remove erroneously placed stone)
+  if (state.originalStones) state.puzzle.stones = [...state.originalStones];
+  hideMsg();
+  updateUI();
+  drawBoard();
+});
+
+document.getElementById("btn-next").addEventListener("click", () => {
+  loadPuzzle();
+});
+
+// ── API key screen ───────────────────────────────────────────────────────
+function showApiScreen() {
+  document.getElementById("api-screen").style.display = "block";
+  document.getElementById("api-badge").style.display = "none";
+  document.querySelector(".stats").style.display = "none";
+  document.getElementById("rankup-banner").style.display = "none";
+  document.querySelector(".card").style.display = "none";
+  document.querySelector(".rank-section").style.display = "none";
+  document.querySelector(".footer-note").style.display = "none";
+  document.getElementById("reliability-warning").style.display = "none";
+}
+
+function hideApiScreen() {
+  document.getElementById("api-screen").style.display = "none";
+  document.getElementById("api-badge").style.display = "block";
+  document.querySelector(".stats").style.display = "flex";
+  document.querySelector(".card").style.display = "block";
+  document.querySelector(".rank-section").style.display = "block";
+  document.querySelector(".footer-note").style.display = "block";
+}
+
+document.getElementById("btn-save-key").addEventListener("click", () => {
+  const val = document.getElementById("api-input").value.trim();
+  if (!val.startsWith("sk-ant-")) {
+    const err = document.getElementById("api-error");
+    err.textContent = "That doesn't look like a valid Anthropic key (should start with sk-ant-)";
+    err.style.display = "block";
+    return;
+  }
+  API_KEY = val;
+  localStorage.setItem("go_dojo_api_key", val);
+  hideApiScreen();
+  updateUI();
+  loadPuzzle();
+});
+
+document.getElementById("api-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-save-key").click();
+});
+
+document.getElementById("change-key-btn").addEventListener("click", () => {
+  document.getElementById("api-input").value = "";
+  document.getElementById("api-error").style.display = "none";
+  showApiScreen();
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  if (!API_KEY) {
+    showApiScreen();
+  } else {
+    hideApiScreen();
+    updateUI();
+    loadPuzzle();
+  }
+});
+</script>
+</body>
+</html>
